@@ -35,7 +35,7 @@ class DKT2[ParamType <: FloatNN: Default](
 //  self.seq_len = seq_len
 //  self.batch_size = batch_size
 //  self.embedding_size = embedding_size
-//  self.hidden_size = embedding_size
+  val hidden_size = embedding_size
 //  self.dropout = dropout
 //  self.device = device
 //  self.factor = factor
@@ -69,7 +69,7 @@ class DKT2[ParamType <: FloatNN: Default](
 
   val dropout_layer: Dropout[ParamType] = Dropout[ParamType](dropout)
   val out_layer: Linear[ParamType] = Linear[ParamType](hidden_size, num_skills)
-  val loss_fn: BCEWithLogitsLoss = BCEWithLogitsLoss(reduction = Reduction.Mean)
+  val loss_fn: BCEWithLogitsLoss = BCEWithLogitsLoss(reduction = "mean")
 
   // 输出层序列
   val out: Sequential[ParamType] = Sequential[ParamType](
@@ -155,7 +155,7 @@ class DKT2[ParamType <: FloatNN: Default](
     output = torch.sigmoid(output)
 
     // 应用one-hot编码并求和
-    val one_hot_q_shft = F.one_hot(q_shft.toType[Int64], num_skills)
+    val one_hot_q_shft = F.one_hot(q_shft, num_skills)
     output = (output * one_hot_q_shft).sum(dim = -1)
 
     // 处理mask_future和joint模式
@@ -180,7 +180,7 @@ class DKT2[ParamType <: FloatNN: Default](
     val true_ = out_dict("true").flatten()
     val mask = true_ > Tensor(-1)
     val loss = loss_fn(pred.masked_select(mask), true_.masked_select(mask))
-    (loss, Tensor(mask.sum().item().toLong), true_.masked_select(mask).sum())
+    (loss, Tensor(mask.sum().item().long()), true_.masked_select(mask).sum())
   }
 
   // 实现apply方法
@@ -195,11 +195,11 @@ class Architecture2[ParamType <: FloatNN: Default](
 ) extends TensorModule[ParamType] with HasParams[ParamType] {
 
   val xlstm_block: TensorModule[ParamType] = xlstm_layer
-  val w_1: Linear[ParamType] = Linear[ParamType](d_model, d_model)
-  val w_2: Linear[ParamType] = Linear[ParamType](d_model, d_model)
-  val activation: SiLU[ParamType] = SiLU[ParamType]()
-  val dropout_layer: Dropout[ParamType] = Dropout[ParamType](dropout)
-  val LayerNorm: LayerNorm[ParamType] = LayerNorm[ParamType](d_model, eps = 1e-12)
+  val w_1: Linear[ParamType] = nn.Linear[ParamType](d_model, d_model)
+  val w_2: Linear[ParamType] = nn.Linear[ParamType](d_model, d_model)
+  val activation: SiLU[ParamType] = nn.SiLU[ParamType]()
+  val dropout_layer: Dropout[ParamType] = nn.Dropout[ParamType](dropout)
+  val LayerNorm: LayerNorm[ParamType] = nn.LayerNorm[ParamType](d_model, eps = 1e-12)
 
   def forward(input_tensor: Tensor[ParamType]): Tensor[ParamType] = {
     val hidden_states1 = activation(w_1(LayerNorm(input_tensor)))

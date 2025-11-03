@@ -22,7 +22,7 @@ class DKTPlus[ParamType <: FloatNN : Default](
   val emb_size: Int = embedding_size
   val hidden_size: Int = embedding_size
   val interaction_emb: Embedding[ParamType] = nn.Embedding(num_skills * 2, emb_size)
-  val lstm_layer: LSTM[ParamType] = nn.LSTM(emb_size, hidden_size, batchFirst = true)
+  val lstm_layer: LSTM[ParamType] = nn.LSTM(emb_size, hidden_size, batch_first = true)
   val dropout_layer: Dropout[ParamType] = nn.Dropout(dropout)
   val out_layer: Linear[ParamType] = nn.Linear(hidden_size, num_skills)
   val loss_fn: BCELoss = nn.BCELoss(reduction = "mean")
@@ -85,7 +85,7 @@ class DKTPlus[ParamType <: FloatNN : Default](
   }
 
   def loss(feed_dict: Map[String, Tensor[ParamType]], out_dict: Map[String, Tensor[ParamType]]): (Tensor[ParamType], Int, Double) = {
-    val sm = out_dict("attention_mask").toType[Boolean]
+    val sm = out_dict("attention_mask")
     val y = out_dict("y")
     val y_curr = out_dict("y_curr")
     val y_next = out_dict("y_next")
@@ -93,16 +93,16 @@ class DKTPlus[ParamType <: FloatNN : Default](
     val r_next = out_dict("r_next")
     
     // 应用掩码并计算损失
-    val y_curr_masked = torch.masked_select(y_curr, sm)
-    val y_next_masked = torch.masked_select(y_next, sm)
-    val r_curr_masked = torch.masked_select(r_curr, sm)
-    val r_next_masked = torch.masked_select(r_next, sm)
+    val y_curr_masked = torch.masked_select(y_curr, sm.bools())
+    val y_next_masked = torch.masked_select(y_next, sm.bools())
+    val r_curr_masked = torch.masked_select(r_curr, sm.bools())
+    val r_next_masked = torch.masked_select(r_next, sm.bools())
     
     // 主损失
-    val loss_main = loss_fn.forward(y_next_masked.toType[Double], r_next_masked.toType[Double])
+    val loss_main = loss_fn.forward(y_next_masked, r_next_masked)
     
     // 正则化损失项
-    val loss_r = loss_fn.forward(y_curr_masked.toType[Double], r_curr_masked.toType[Double])
+    val loss_r = loss_fn.forward(y_curr_masked, r_curr_masked)
     
     // L1正则化
     val y_shifted_1 = y.narrow(1, length, y.size(1) - length)

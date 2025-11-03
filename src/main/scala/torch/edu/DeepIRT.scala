@@ -3,7 +3,8 @@ package torch.edu
 import torch.*
 import torch.nn.functional as F
 import torch.nn.modules.{HasParams, TensorModule}
-
+import torch.nn as nn
+import torch.nn.*
 import scala.collection.mutable.ListBuffer
 
 class DeepIRT[ParamType <: FloatNN: Default](

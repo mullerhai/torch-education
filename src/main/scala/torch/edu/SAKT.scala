@@ -129,7 +129,8 @@ class SAKT[ParamType <: FloatNN: Default](
   private val pred = if (trans) Linear[ParamType](embedding_size, num_skills) else Linear[ParamType](embedding_size, 1)
   
   // BCE损失函数
-  private val loss_fn = Binarycross_entropyLoss(reduction = "mean")
+  private val loss_fn = nn.BCELoss() // F.binary_cross_entropy()//.Binarycross_entropyLoss(reduction = "mean")
+  
   
   // 收集所有参数
   override def params: Seq[Tensor[ParamType]] = {
@@ -193,7 +194,7 @@ class SAKT[ParamType <: FloatNN: Default](
       if (joint) {
         // 联合模式
         val pRaw = pred(dropout_layer(currentEmb))
-        val seqLen = pRaw.shape(1).int()
+        val seqLen = pRaw.shape(1)
         val mid = seqLen / 2
         
         // 复制中间部分的预测结果到后半部分
@@ -202,7 +203,7 @@ class SAKT[ParamType <: FloatNN: Default](
         
         // 应用sigmoid并与one-hot编码相乘
         val pSigmoid = torch.sigmoid(pExpanded)
-        val oneHotCSHft = F.one_hot(cshft.toLong, num_skills)
+        val oneHotCSHft = F.one_hot(cshft.long(), num_skills)
         val pSum = (pSigmoid * oneHotCSHft).sum(-1)
         
         // 截取后半部分的预测结果和真实值
@@ -214,7 +215,7 @@ class SAKT[ParamType <: FloatNN: Default](
       } else {
         // 非联合模式
         val pRaw = torch.sigmoid(pred(dropout_layer(currentEmb)))
-        val oneHotCSHft = F.one_hot(cshft.toLong, num_skills)
+        val oneHotCSHft = F.one_hot(cshft.long(), num_skills)
         val pSum = (pRaw * oneHotCSHft).sum(-1)
         val trueFinal = r.slice(1, length, r.shape(1))
         
@@ -260,8 +261,8 @@ class SAKT[ParamType <: FloatNN: Default](
 // 辅助函数：创建上三角掩码
 def ut_mask[ParamType <: FloatNN: Default](seq_len: Long, device: Device): Tensor[ParamType] = {
   // 创建全1矩阵，然后转换为上三角矩阵，对角线为1
-  val ones = torch.ones[ParamType](Seq(seq_len, seq_len), device = device)
-  torch.triu(ones, diagonal = 1).to[Boolean]
+  val ones = torch.ones(Seq(seq_len, seq_len), device = device)
+  torch.triu(ones, diagonal = 1)
 }
 
 // 辅助函数：位置编码

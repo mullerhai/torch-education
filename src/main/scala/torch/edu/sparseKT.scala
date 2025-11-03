@@ -14,7 +14,7 @@ enum Dim {
 }
 
 // 余弦位置编码
-class CosinePositionalEmbedding[ParamType <: FloatNN: Default] private (
+class CosinePositionalEmbedding8[ParamType <: FloatNN: Default] private (
     val weight: Tensor[ParamType]
 ) extends HasParams[ParamType] {
   override def params: Seq[Tensor[ParamType]] = Seq(weight)
@@ -29,11 +29,11 @@ object CosinePositionalEmbedding {
   def apply[ParamType <: FloatNN: Default](embeddingSize: Int, maxLen: Int = 512): CosinePositionalEmbedding[ParamType] = {
     // 初始化位置编码
     val pe = torch.randn[ParamType](Seq(1, maxLen, embeddingSize)) * 0.1
-    val position = torch.arange(0, maxLen).unsqueeze(1).toDType[ParamType]
+    val position = torch.arange(0, maxLen).unsqueeze(1)
     
     // 计算除数项
     val divTerm = torch.exp(
-      torch.arange(0, embeddingSize, 2).toDType[ParamType] * 
+      torch.arange(0, embeddingSize, 2) *
       -(math.log(10000.0) / embeddingSize)
     )
     
@@ -52,7 +52,7 @@ object CosinePositionalEmbedding {
 }
 
 // 可学习的位置编码
-class LearnablePositionalEmbedding[ParamType <: FloatNN: Default] private (
+class LearnablePositionalEmbedding7[ParamType <: FloatNN: Default] private (
     val weight: Tensor[ParamType]
 ) extends HasParams[ParamType] {
   override def params: Seq[Tensor[ParamType]] = Seq(weight)
@@ -71,7 +71,7 @@ object LearnablePositionalEmbedding {
 }
 
 // 注意力计算函数
-private def attention[ParamType <: FloatNN: Default](
+private def attention7[ParamType <: FloatNN: Default](
     q: Tensor[ParamType], k: Tensor[ParamType], v: Tensor[ParamType], d_k: Int,
     mask: Tensor[ParamType], dropout: Dropout[ParamType], zeroPad: Boolean,
     embType: String = "qid", sparseRatio: Double = 0.8, kIndex: Int = 5
@@ -121,7 +121,7 @@ private def attention[ParamType <: FloatNN: Default](
     val a = torch.ones(Seq(bs * head * seqlen, seqlen))
     newMask.scatter_(1, idx, a)
     
-    val idxMatrix = torch.arange(0, seqlen).repeat(Seq(bs * seqlen * head, 1)).toDType[ParamType]
+    val idxMatrix = torch.arange(0, seqlen).repeat(Seq(bs * seqlen * head, 1))
     val newMask2 = idxMatrix.where(idxMatrix - idx <= 0, Tensor.zerosLike(idxMatrix))
       .where(idxMatrix - idx > 0, torch.ones_like(idxMatrix))
     
@@ -222,12 +222,12 @@ class MultiHeadAttention6[ParamType <: FloatNN: Default](
     val bs = q.size(0)
     
     // 线性变换并分块
-    val kTransformed = kLinear(k).view(Seq(bs, -1, h, dK))
+    val kTransformed = kLinear(k).view(bs, -1, h, dK)
     val qTransformed = qLinearOpt match {
-      case Some(qLinear) => qLinear(q).view(Seq(bs, -1, h, dK))
-      case None => kLinear(q).view(Seq(bs, -1, h, dK))
+      case Some(qLinear) => qLinear(q).view(bs, -1, h, dK)
+      case None => kLinear(q).view(bs, -1, h, dK)
     }
-    val vTransformed = vLinear(v).view(Seq(bs, -1, h, dK))
+    val vTransformed = vLinear(v).view(bs, -1, h, dK)
     
     // 转置以获得正确的维度顺序
     val kTransposed = kTransformed.transpose(1, 2)
@@ -302,8 +302,8 @@ class TransformerLayer6[ParamType <: FloatNN: Default](
     // 创建掩码
     val nopeekMask = torch.ones(Seq(1, 1, seqlen, seqlen))
       .triu(k = mask)
-      .toDType[IntNN] == 0
-    val srcMask = nopeekMask.toDType[ParamType]
+       == 0
+    val srcMask = nopeekMask
     
     // 注意力计算
     val (query2, attnWeights) = if (mask == 0) {
@@ -337,7 +337,7 @@ class TransformerLayer6[ParamType <: FloatNN: Default](
 }
 
 // 架构类
-class Architecture6[ParamType <: FloatNN: Default](
+class Architecture16[ParamType <: FloatNN: Default](
     numSkills: Int,
     numBlocks: Int,
     embeddingSize: Int,
@@ -459,9 +459,7 @@ class sparseKT[ParamType <: FloatNN: Default](
   } else None
   
   // 架构模型
-  val model = Architecture[
-    ParamType
-  ](
+  val model = Architecture16(
     num_skills = num_skills,
     num_blocks = num_blocks,
     n_heads = num_attn_heads,
@@ -502,7 +500,7 @@ class sparseKT[ParamType <: FloatNN: Default](
   }
   
   // 损失函数
-  val loss_fn = BCELoss(reduction = Reduction.Mean)
+  val loss_fn = nn.BCELoss(reduction = "mean")
   
   // 初始化参数
   reset()
@@ -518,10 +516,10 @@ class sparseKT[ParamType <: FloatNN: Default](
   def base_emb(q_data: Tensor[ParamType], target: Tensor[ParamType]): (Tensor[ParamType], Tensor[ParamType]) = {
     val q_embed_data = q_embed_opt.get(q_data)
     val qa_embed_data = if (separate_qr) {
-      val qa_data = q_data + num_skills * target.toDType[IntNN]
+      val qa_data = q_data + num_skills * target
       qa_embed_opt.get(qa_data)
     } else {
-      qa_embed_opt.get(target.toDType[IntNN]) + q_embed_data
+      qa_embed_opt.get(target) + q_embed_data
     }
     (q_embed_data, qa_embed_data)
   }
@@ -544,7 +542,7 @@ class sparseKT[ParamType <: FloatNN: Default](
     val c = feed_dict("skills")
     val attention_mask = feed_dict("attention_mask")
     var q_data = c
-    var target = r * (r > -1).toDType[IntNN]
+    var target = r * (r > -1)
     
     var cshft: Tensor[ParamType] = null
     var true_values: Tensor[ParamType] = null
@@ -557,14 +555,14 @@ class sparseKT[ParamType <: FloatNN: Default](
       cshft = c.slice(Seq(None, Some(length)), Seq())
       attention_mask = attention_mask.slice(Seq(None, None), Seq(None, Some(-length)))
     } else if (mask_future) {
-      val mask = Tensor.ones_like(attention_mask)
+      val mask = torch.ones_like(attention_mask)
       mask.slice(Seq(None, Some(-length)), Seq()).fill_(0f)
       attention_mask = attention_mask * mask
       pid_data = pid_data * attention_mask
       q_data = q_data * attention_mask
       target = target * attention_mask
     } else if (mask_response) {
-      val mask = Tensor.ones_like(attention_mask)
+      val mask = torch.ones_like(attention_mask)
       mask.slice(Seq(None, Some(-length)), Seq()).fill_(0f)
       attention_mask = attention_mask * mask
       target = target * attention_mask
@@ -591,7 +589,7 @@ class sparseKT[ParamType <: FloatNN: Default](
         val pid_embed_data = difficult_param_opt.get(pid_data)
         q_embed_data = q_embed_data + pid_embed_data * q_embed_diff_data
         
-        val qa_embed_diff_data = qa_embed_diff_opt.get(target.toDType[IntNN])
+        val qa_embed_diff_data = qa_embed_diff_opt.get(target)
         qa_embed_data = qa_embed_data + pid_embed_data * (qa_embed_diff_data + q_embed_diff_data)
       }
     }
@@ -626,15 +624,15 @@ class sparseKT[ParamType <: FloatNN: Default](
       
       // 根据模式处理预测结果
       if (trans) {
-        val oneHot = F.one_hot(cshft.toDType[IntNN], num_skills)
+        val oneHot = F.one_hot(cshft, num_skills)
         preds = (preds * oneHot).sum(-1)
-        true_values = r.slice(Seq(None, Some(length)), Seq()).toDType[ParamType]
+        true_values = r.slice(Seq(None, Some(length)), Seq())
       } else if (mask_future || pred_last || mask_response) {
         preds = preds.slice(Seq(None, Some(-length)), Seq())
-        true_values = r.slice(Seq(None, Some(-length)), Seq()).toDType[ParamType]
+        true_values = r.slice(Seq(None, Some(-length)), Seq())
       } else {
         preds = preds.slice(Seq(None, Some(length)), Seq())
-        true_values = r.slice(Seq(None, Some(length)), Seq()).toDType[ParamType]
+        true_values = r.slice(Seq(None, Some(length)), Seq())
       }
     }
     

@@ -46,8 +46,8 @@ class StackedDense[ParamType <: FloatNN : Default](
   // 权重初始化
   def default_weight_init(tensor: Tensor[ParamType]): Unit = {
     // Xavier均匀初始化
-    val fanIn = tensor.size(-2).int()
-    val fanOut = tensor.size(-1).int()
+    val fanIn = tensor.size(-2)
+    val fanOut = tensor.size(-1)
     val gain = 1.0
     val std = gain * math.sqrt(2.0 / (fanIn + fanOut))
     val a = math.sqrt(3.0) * std // Xavier uniform初始化的边界

@@ -30,7 +30,7 @@ class ATKT[ParamType <: FloatNN: Default](
   val beta_val = beta
   
   // LSTM层
-  val rnn = torch.nn.LSTM[ParamType](skill_dim + answer_dim, hidden_dim, batchFirst = true)
+  val rnn = torch.nn.LSTM[ParamType](skill_dim + answer_dim, hidden_dim, batch_first = true)
   
   // Dropout层
   val dropout_layer = torch.nn.Dropout[ParamType](dropout)
@@ -109,7 +109,7 @@ class ATKT[ParamType <: FloatNN: Default](
     val r = feed_dict("responses")
     
     // 处理掩码
-    val masked_r = r * (r > (-1.0f)).toTensor[ParamType].asLong()
+    val masked_r = r * (r > (-1.0f)).long()
     
     // 获取技能和答案序列
     val skill = c.slice(1, 0, -length)
@@ -164,20 +164,20 @@ class ATKT[ParamType <: FloatNN: Default](
     // 计算预测结果
     val (preds, true_val) = if (joint) {
       val one_hot_c = torch.nn.functional.one_hot(c.slice(1, length).long(), num_skills)
-      val joint_preds = (res * one_hot_c.toTensor[ParamType]).sum(-1)
+      val joint_preds = (res * one_hot_c).sum(-1)
       val seq_len = res.shape(1)
       val mid = seq_len / 2
       val rshft = r.slice(1, length)
-      (joint_preds.slice(1, mid), rshft.slice(1, mid).toTensor[ParamType])
+      (joint_preds.slice(1, mid), rshft.slice(1, mid))
     } else {
       val one_hot_c = torch.nn.functional.one_hot(c.slice(1, length).long(), num_skills)
-      val normal_preds = (res * one_hot_c.toTensor[ParamType]).sum(-1)
-      (normal_preds, r.slice(1, length).toTensor[ParamType])
+      val normal_preds = (res * one_hot_c).sum(-1)
+      (normal_preds, r.slice(1, length))
     }
     
     // 处理mask_future模式
     val (final_preds, final_true) = if (mask_future) {
-      (preds.slice(1, -length), r.slice(1, -length).toTensor[ParamType])
+      (preds.slice(1, -length), r.slice(1, -length))
     } else {
       (preds, true_val)
     }
@@ -203,7 +203,7 @@ class ATKT[ParamType <: FloatNN: Default](
     val loss_val = loss_fn(pred.masked_select(mask), true_val.masked_select(mask))
     
     // 计算对抗扰动
-    val features_grad = torch.autograd.grad(Seq(loss_val), Seq(features), retainGraph = true)
+    val features_grad = torch.autograd.grad(Seq(loss_val), Seq(features), retain_graph = true)
     val p_adv = _l2_normalize_adv(features_grad.head.data) * epsilon_val
     
     // 应用对抗扰动并计算对抗损失
@@ -219,7 +219,7 @@ class ATKT[ParamType <: FloatNN: Default](
   
   // 上三角掩码函数
   def ut_mask(seq_len: Int, device: torch.Device): Tensor[Boolean] = {
-    torch.triu(torch.ones[Boolean](seq_len, seq_len), diagonal = 1).to(device)
+    torch.triu(torch.ones(seq_len, seq_len), diagonal = 1).to(device)
   }
   
   // L2归一化函数

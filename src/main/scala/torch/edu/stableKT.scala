@@ -61,7 +61,7 @@ class stableKT[ParamType <: FloatNN: Default](
   }
   
   // Architecture Object
-  val model = new Architecture2[ParamType](
+  val model = new Architecture7[ParamType](
     num_skills = num_skills,
     num_blocks = num_blocks,
     n_heads = num_attn_heads,
@@ -116,7 +116,7 @@ class stableKT[ParamType <: FloatNN: Default](
     val q_embed_data = q_embed(q_data)  // BS, seqlen, d_model
     
     val qa_embed_data = if (separate_qr) {
-      val qa_data = q_data + (target * num_skills.toLong).long()
+      val qa_data = q_data + (target * num_skills.long()).long()
       qa_embed(qa_data)
     } else {
       qa_embed(target) + q_embed_data
@@ -415,7 +415,7 @@ class MultiHeadAttention2[ParamType <: FloatNN: Default](
     if (math.log(n) / math.log(2) % 1 == 0) {
       get_slopes_power_of_2(n)
     } else {
-      val closest_power_of_2 = math.pow(2, math.floor(math.log(n) / math.log(2))).int()
+      val closest_power_of_2 = math.pow(2, math.floor(math.log(n) / math.log(2)))
       val slopes_power_of_2 = get_slopes_power_of_2(closest_power_of_2)
       val slopes_remaining = get_slopes(2 * closest_power_of_2).slice(0, 2 * closest_power_of_2, 2).take(n - closest_power_of_2)
       slopes_power_of_2 ++ slopes_remaining
@@ -450,13 +450,13 @@ class MultiHeadAttention2[ParamType <: FloatNN: Default](
     val bs = query.size(0)
     val half_h = h / 2
     
-    val k_proj = k_linear(key).reshape(Seq(bs, -1, h, d_k))
+    val k_proj = k_linear(key).reshape(bs, -1, h, d_k)
     val q_proj = if (!kq_same) {
-      q_linear.get(query).reshape(Seq(bs, -1, h, d_k))
+      q_linear.get(query).reshape(bs, -1, h, d_k)
     } else {
-      k_linear(query).reshape(Seq(bs, -1, h, d_k))
+      k_linear(query).reshape(bs, -1, h, d_k)
     }
-    val v_proj = v_linear(values).reshape(Seq(bs, -1, h, d_k))
+    val v_proj = v_linear(values).reshape(bs, -1, h, d_k)
     
     // Transpose to get dimensions bs * h * sl * d_model
     val k_transposed = k_proj.transpose(1, 2)
@@ -483,7 +483,7 @@ class MultiHeadAttention2[ParamType <: FloatNN: Default](
     val scores_concat = torch.cat(Seq(scores, scores_hakt), dim = 1)
     
     // Concatenate heads and put through final linear layer
-    val concat = scores_concat.transpose(1, 2).reshape(Seq(bs, -1, d_model))
+    val concat = scores_concat.transpose(1, 2).reshape(bs, -1, d_model)
     val output = out_proj(concat)
     
     output
@@ -662,7 +662,7 @@ class CosinePositionalEmbedding2[ParamType <: FloatNN: Default](d_model: Int, ma
     pe.slice(1, 0, x.size(1))
   }
   
-  override def parameters: Seq[Parameter[ParamType]] = Seq(pe)
+  override def parameters: Seq[nn.Parameter[ParamType]] = Seq(pe)
 }
 
 class LearnablePositionalEmbedding2[ParamType <: FloatNN: Default](d_model: Int, max_len: Int = 512) extends HasParams[ParamType] with TensorModule[ParamType] {

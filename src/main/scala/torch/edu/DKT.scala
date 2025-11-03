@@ -22,7 +22,7 @@ class DKT[ParamType <: FloatNN: Default](
   
   // 模型层
   val interactionEmb: Embedding[ParamType] = Embedding(numSkills * 2, embSize)
-  val lstmLayer: LSTM[ParamType] = LSTM(embSize, hiddenSize, batchFirst = true)
+  val lstmLayer: LSTM[ParamType] = LSTM(embSize, hiddenSize, batch_first = true)
   val dropoutLayer: Dropout[ParamType] = Dropout(dropout)
   val outLayer: Linear[ParamType] = Linear(hiddenSize, numSkills)
   val lossFn: BCELoss = BCELoss(reduction = "mean")

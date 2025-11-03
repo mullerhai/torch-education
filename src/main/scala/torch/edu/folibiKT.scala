@@ -67,7 +67,7 @@ class folibiKT[ParamType <: FloatNN: Default]
   }
 
   // 架构对象
-  val model = new Architecture[ParamType](
+  val model = new Architecture4[ParamType](
     num_skills = num_skills,
     num_blocks = num_blocks,
     n_heads = num_attn_heads,
@@ -253,7 +253,7 @@ class folibiKT[ParamType <: FloatNN: Default]
     val mask = true_values > -1
     val loss = loss_fn(pred.masked_select(mask), true_values.masked_select(mask))
     val total_loss = loss + c_reg_loss
-    val count = pred.masked_select(mask).shape(0).int()
+    val count = pred.masked_select(mask).shape(0)//.int()
     val sum_true = true_values.masked_select(mask).sum().item().double()
     (total_loss, count, sum_true)
   }
@@ -290,7 +290,7 @@ class Architecture4[ParamType <: FloatNN: Default]
 
   if (model_type == "folibikt") {
     for (_ <- 0 until num_blocks) {
-      blocks_1 += new TransformerLayer[ParamType](
+      blocks_1 += new TransformerLayer4[ParamType](
         embedding_size = embedding_size,
         d_feature = embedding_size / n_heads,
         d_ff = d_ff,
@@ -304,7 +304,7 @@ class Architecture4[ParamType <: FloatNN: Default]
     }
 
     for (_ <- 0 until num_blocks * 2) {
-      blocks_2 += new TransformerLayer[ParamType](
+      blocks_2 += new TransformerLayer4[ParamType](
         embedding_size = embedding_size,
         d_feature = embedding_size / n_heads,
         d_ff = d_ff,
@@ -373,9 +373,9 @@ class TransformerLayer4[ParamType <: FloatNN: Default]
     with HasParams[ParamType] {
 
   // 多头注意力层
-  val masked_attn_head = new MultiHeadAttention[ParamType](
+  val masked_attn_head = new MultiHeadAttention4[ParamType](
     embedding_size = embedding_size,
-    d_feature = d_feature.int(),
+    d_feature = d_feature.toInt,
     n_heads = n_heads,
     dropout = dropout,
     kq_same = kq_same,
@@ -403,8 +403,8 @@ class TransformerLayer4[ParamType <: FloatNN: Default]
               values: Tensor[ParamType], 
               apply_pos: Boolean = true, 
               pdiff: Option[Tensor[ParamType]] = None): Tensor[ParamType] = {
-    val seqlen = query.shape(1).int()
-    val batch_size = query.shape(0).int()
+    val seqlen = query.shape(1)
+    val batch_size = query.shape(0)
     val device = query.device
 
     // 创建掩码
@@ -536,12 +536,12 @@ class MultiHeadAttention4[ParamType <: FloatNN: Default]
       }
 
       if (proj_bias) {
-        nn.init.constant_(k_linear.get.bias.get, 0.0)
-        nn.init.constant_(v_linear.get.bias.get, 0.0)
+        nn.init.constant_(k_linear.get.bias, 0.0)
+        nn.init.constant_(v_linear.get.bias, 0.0)
         if (!kq_same) {
-          nn.init.constant_(q_linear.get.bias.get, 0.0)
+          nn.init.constant_(q_linear.get.bias, 0.0)
         }
-        nn.init.constant_(out_proj.bias.get, 0.0)
+        nn.init.constant_(out_proj.bias, 0.0)
       }
     }
   }
@@ -639,9 +639,9 @@ object attention {
 
     // 计算注意力分数
     var scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(d_k)
-    val bs = scores.shape(0).int()
-    val head = scores.shape(1).int()
-    val seqlen = scores.shape(2).int()
+    val bs = scores.shape(0)
+    val head = scores.shape(1)
+    val seqlen = scores.shape(2)
     val device = q.device
 
     // 创建位置索引
@@ -650,7 +650,7 @@ object attention {
 
     // 处理不同类型的注意力
     if (emb_type.contains("alibi") && alibi.isDefined) {
-      val seq_len = scores.shape(3).int()
+      val seq_len = scores.shape(3)
       scores = scores + alibi.get.slice(2, 0, seq_len).slice(3, 0, seq_len)
     }
 
@@ -771,8 +771,8 @@ class T5RelativePositionBias[ParamType <: FloatNN: Default](
     val is_small = n < max_exact
 
     val val_if_large = max_exact + (
-      torch.log(n.toType[Double] / max_exact) /
-      math.log(max_distance.double() / max_exact) *
+      torch.log(n / max_exact) /
+      math.log(max_distance.toDouble) / max_exact) *
       (num_buckets - max_exact)
     )
     val val_if_large_clamped = torch.min(
@@ -785,8 +785,8 @@ class T5RelativePositionBias[ParamType <: FloatNN: Default](
   }
 
   def forward(x: Tensor[ParamType]): Tensor[ParamType] = {
-    val i = x.shape(x.dim - 2).int()
-    val j = x.shape(x.dim - 1).int()
+    val i = x.shape(x.dim - 2)
+    val j = x.shape(x.dim - 1)
     val device = x.device
     
     val q_pos = torch.arange(end = i, device = device)
@@ -825,10 +825,10 @@ class RotaryPositionalEmbeddings[ParamType <: FloatNN: Default](d: Int, base: In
 
   def forward(x: Tensor[ParamType]): Tensor[ParamType] = {
     // 提取形状
-    val batch_size = x.shape(0).int()
-    val seq_len = x.shape(1).int()
-    val n_heads = x.shape(2).int()
-    val d = x.shape(3).int()
+    val batch_size = x.shape(0)
+    val seq_len = x.shape(1)
+    val n_heads = x.shape(2)
+    val d = x.shape(3)
 
     // d/2
     val d_2 = d / 2

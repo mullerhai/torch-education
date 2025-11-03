@@ -43,7 +43,7 @@ class CL4KTTransformerLayer[ParamType <: FloatNN: Default](
     val query = t(1)
     val key = t(2)
     val values = t(3)
-    val apply_pos = t(4).toBoolean
+    val apply_pos = t(4).bools()
     
     forward(mask, query, key, values, apply_pos)._1
   }
@@ -206,7 +206,7 @@ class CL4KT[ParamType <: FloatNN: Default](
   }
   
   // 损失函数
-  val cl_loss_fn = torch.nn.cross_entropyLoss()
+  val cl_loss_fn = torch.nn.CrossEntropyLoss()
   val loss_fn = torch.nn.BCELoss()
   
   // 获取所有参数
@@ -228,8 +228,8 @@ class CL4KT[ParamType <: FloatNN: Default](
   
   // 获取交互嵌入
   def get_interaction_embed(skills: Tensor[ParamType], responses: Tensor[ParamType]): Tensor[ParamType] = {
-    val masked_responses = responses * (responses > (-1.0f)).toTensor[ParamType].asLong()
-    val interactions = skills + (num_skills * masked_responses.toTensor[ParamType])
+    val masked_responses = responses * (responses > (-1.0f)).long()
+    val interactions = skills + (num_skills * masked_responses)
     interaction_embed(interactions.long())
   }
   
@@ -376,7 +376,7 @@ class CL4KT[ParamType <: FloatNN: Default](
       
       // 计算对比学习损失
       val ques_cos_sim = sim(pooled_ques_i_score.unsqueeze(1), pooled_ques_j_score.unsqueeze(0))
-      val ques_labels = torch.arange(ques_cos_sim.shape(0)).to(ques_cos_sim.device).as[ParamType]
+      val ques_labels = torch.arange(ques_cos_sim.shape(0)).to(ques_cos_sim.device)
       val question_cl_loss = cl_loss_fn(ques_cos_sim, ques_labels.long())
       
       val pooled_inter_i_score = (inter_i_score * attention_mask_i.unsqueeze(-1)).sum(1) / 
@@ -395,7 +395,7 @@ class CL4KT[ParamType <: FloatNN: Default](
         inter_cos_sim = torch.cat(Seq(inter_cos_sim, neg_inter_cos_sim), dim = 1)
       }
       
-      val inter_labels = torch.arange(inter_cos_sim.shape(0)).to(inter_cos_sim.device).as[ParamType]
+      val inter_labels = torch.arange(inter_cos_sim.shape(0)).to(inter_cos_sim.device)
       
       if (negative_prob > 0) {
         // 添加硬负样本权重
@@ -467,14 +467,14 @@ class CL4KT[ParamType <: FloatNN: Default](
           output = torch.sigmoid(output)
           // 使用one-hot编码
           val one_hot_cshft = torch.nn.functional.one_hot(cshft.long(), num_skills)
-          output = (output * one_hot_cshft.toTensor[ParamType]).sum(-1)
+          output = (output * one_hot_cshft).sum(-1)
           val rshft = r.slice(1, length)
           true_output = rshft.slice(1, mid)
           output = output.slice(1, mid)
         } else {
           output = torch.sigmoid(out(retrieved_knowledge))
           val one_hot_cshft = torch.nn.functional.one_hot(cshft.long(), num_skills)
-          output = (output * one_hot_cshft.toTensor[ParamType]).sum(-1)
+          output = (output * one_hot_cshft).sum(-1)
           true_output = r.slice(1, length)
         }
       } else if (mask_future || pred_last || mask_response) {
@@ -587,14 +587,14 @@ class CL4KT[ParamType <: FloatNN: Default](
           output = torch.sigmoid(output)
           // 使用one-hot编码
           val one_hot_cshft = torch.nn.functional.one_hot(cshft.long(), num_skills)
-          output = (output * one_hot_cshft.toTensor[ParamType]).sum(-1)
+          output = (output * one_hot_cshft).sum(-1)
           val rshft = r.slice(1, length)
           true_output = rshft.slice(1, mid)
           output = output.slice(1, mid)
         } else {
           output = torch.sigmoid(out(retrieved_knowledge))
           val one_hot_cshft = torch.nn.functional.one_hot(cshft.long(), num_skills)
-          output = (output * one_hot_cshft.toTensor[ParamType]).sum(-1)
+          output = (output * one_hot_cshft).sum(-1)
           true_output = r.slice(1, length)
         }
       } else if (mask_future || pred_last || mask_response) {

@@ -21,7 +21,7 @@ class CosinePositionalEmbedding5[ParamType <: FloatNN: Default](
 ) extends HasParams[ParamType]:
   // 计算位置编码并保存为参数
   private val pe = {
-    val tempPe = 0.1f * torch.randn[ParamType](Seq(max_len.toLong, embedding_size.toLong))
+    val tempPe = 0.1f * torch.randn[ParamType](Seq(max_len, embedding_size))
     val position = torch.arange(0, max_len).unsqueeze(1)
     val divTerm = torch.exp(
       torch.arange(0, embedding_size, 2) *
@@ -47,13 +47,13 @@ class CosinePositionalEmbedding5[ParamType <: FloatNN: Default](
   def apply(x: Tensor[ParamType]): Tensor[ParamType] = forward(x)
 
 // 可学习的位置编码
-class LearnablePositionalEmbedding[ParamType <: FloatNN: Default](
+class LearnablePositionalEmbedding7[ParamType <: FloatNN: Default](
     embedding_size: Int,
     max_len: Int = 512
 ) extends HasParams[ParamType]:
   // 创建可学习的位置编码参数
   private val weight = Parameter[ParamType](
-    0.1f * torch.randn[ParamType](Seq(1, max_len.toLong, embedding_size.toLong))
+    0.1f * torch.randn[ParamType](Seq(1, max_len, embedding_size))
   )
   
   // 收集参数
@@ -68,7 +68,7 @@ class LearnablePositionalEmbedding[ParamType <: FloatNN: Default](
   def apply(x: Tensor[ParamType]): Tensor[ParamType] = forward(x)
 
 // 注意力计算函数
-def attention[ParamType <: FloatNN: Default](
+def attention7[ParamType <: FloatNN: Default](
     q: Tensor[ParamType],
     k: Tensor[ParamType],
     v: Tensor[ParamType],
@@ -79,9 +79,9 @@ def attention[ParamType <: FloatNN: Default](
 ): Tensor[ParamType] = {
   // 计算注意力分数
   val scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(d_k)
-  val bs = scores.shape(0).int()
-  val head = scores.shape(1).int()
-  val seqlen = scores.shape(2).int()
+  val bs = scores.shape(0)
+  val head = scores.shape(1)
+  val seqlen = scores.shape(2)
   val device = q.device
   
   // 应用掩码
@@ -92,7 +92,7 @@ def attention[ParamType <: FloatNN: Default](
   
   // 应用零填充（如果需要）
   val paddedScores = if (zero_pad) {
-    val padZero = torch.zeros[ParamType](Seq(bs.toLong, head.toLong, 1, seqlen.toLong), device = device)
+    val padZero = torch.zeros(Seq(bs, head, 1, seqlen), device = device)
     torch.cat(Seq(padZero, softmaxScores.slice(2, 1, softmaxScores.shape(2))), dim = 2)
   } else {
     softmaxScores
@@ -158,16 +158,16 @@ class MultiHeadAttention5[ParamType <: FloatNN: Default](
     mask: Tensor[Boolean],
     zero_pad: Boolean
   ): Tensor[ParamType] = {
-    val bs = q.shape(0).int()
+    val bs = q.shape(0)
     
     // 线性变换并分拆成多个头
-    val kTransformed = k_linear(k).view(Seq(bs.toLong, -1, h.toLong, d_k.toLong))
+    val kTransformed = k_linear(k).view(Seq(bs, -1, h, d_k))
     val qTransformed = if (!kq_same_flag) {
-      q_linear.get(q).view(Seq(bs.toLong, -1, h.toLong, d_k.toLong))
+      q_linear.get(q).view(Seq(bs, -1, h, d_k))
     } else {
-      k_linear(q).view(Seq(bs.toLong, -1, h.toLong, d_k.toLong))
+      k_linear(q).view(Seq(bs, -1, h, d_k))
     }
-    val vTransformed = v_linear(v).view(Seq(bs.toLong, -1, h.toLong, d_k.toLong))
+    val vTransformed = v_linear(v).view(Seq(bs, -1, h, d_k))
     
     // 转置以获得正确的维度顺序
     val kTransposed = kTransformed.transpose(1, 2)
@@ -175,11 +175,11 @@ class MultiHeadAttention5[ParamType <: FloatNN: Default](
     val vTransposed = vTransformed.transpose(1, 2)
     
     // 计算注意力
-    val scores = attention(qTransposed, kTransposed, vTransposed, d_k, mask, dropoutLayer, zero_pad)
+    val scores = attention7(qTransposed, kTransposed, vTransposed, d_k, mask, dropoutLayer, zero_pad)
     
     // 拼接所有头并通过最终线性层
     val concat = scores.transpose(1, 2).contiguous()
-      .view(Seq(bs.toLong, -1, embedding_size.toLong))
+      .view(Seq(bs, -1, embedding_size))
     
     out_proj(concat)
   }
@@ -241,12 +241,12 @@ class TransformerLayer5[ParamType <: FloatNN: Default](
     values: Tensor[ParamType],
     apply_pos: Boolean
   ): Tensor[ParamType] = {
-    val seqlen = query.shape(1).int()
-    val batch_size = query.shape(0).int()
+    val seqlen = query.shape(1)
+    val batch_size = query.shape(0)
     val device = query.device
     
     // 创建掩码
-    val nopeek_mask = torch.ones[Boolean](Seq(1, 1, seqlen.toLong, seqlen.toLong), device = device)
+    val nopeek_mask = torch.ones(Seq(1, 1, seqlen, seqlen), device = device)
       .triu(diagonal = mask)
     val src_mask = nopeek_mask
     
@@ -296,7 +296,7 @@ class Architecture5[ParamType <: FloatNN: Default](
   private val blocks_2 = (0 until num_blocks).map(_ => 
     TransformerLayer[ParamType](
       embedding_size,
-      (embedding_size / n_heads).int(), // d_feature
+      (embedding_size / n_heads), // d_feature
       d_ff,
       n_heads,
       dropout,
@@ -318,8 +318,8 @@ class Architecture5[ParamType <: FloatNN: Default](
     qa_embed_data: Tensor[ParamType]
   ): Tensor[ParamType] = {
     // 计算序列长度和批次大小
-    val seqlen = q_embed_data.shape(1).int()
-    val batch_size = q_embed_data.shape(0).int()
+    val seqlen = q_embed_data.shape(1)
+    val batch_size = q_embed_data.shape(0)
     
     // 添加位置编码
     val q_posemb = position_emb(q_embed_data)
@@ -387,7 +387,7 @@ class SimpleKT[ParamType <: FloatNN: Default](
     num_skills,
     num_blocks,
     embedding_size,
-    embedding_size.double() / num_attn_heads,
+    embedding_size / num_attn_heads,
     d_ff,
     num_attn_heads,
     dropout,
@@ -419,7 +419,7 @@ class SimpleKT[ParamType <: FloatNN: Default](
   }
   
   // 创建损失函数
-  private val loss_fn = Binarycross_entropyLoss(reduction = "mean")
+  private val loss_fn = nn.BCELoss()//Binarycross_entropyLoss(reduction = "mean")
   
   // 初始化
   reset()
@@ -529,7 +529,7 @@ class SimpleKT[ParamType <: FloatNN: Default](
     // 根据不同模式处理预测结果
     val (final_preds, true_values) = if (trans) {
       // 转换模式
-      val oneHotCSHft = F.one_hot(cshft.toLong, num_skills)
+      val oneHotCSHft = F.one_hot(cshft.long(), num_skills)
       val sumPreds = (preds * oneHotCSHft).sum(-1)
       val trueVals = r.slice(1, length, r.shape(1))
       (sumPreds, trueVals)

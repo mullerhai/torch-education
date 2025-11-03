@@ -95,9 +95,9 @@ class DKVMN[ParamType <: FloatNN: Default] private (
     val a = F.tanh(a_layer(v))
 
     // 交换维度以便按时间步处理
-    val e_permuted = e.permute(Seq(1, 0, 2))
-    val a_permuted = a.permute(Seq(1, 0, 2))
-    val w_permuted = w.permute(Seq(1, 0, 2))
+    val e_permuted = e.permute(1, 0, 2)
+    val a_permuted = a.permute(1, 0, 2)
+    val w_permuted = w.permute(1, 0, 2)
 
     // 获取时间步数量
     val time_steps = e_permuted.shape(0)
@@ -141,7 +141,7 @@ class DKVMN[ParamType <: FloatNN: Default] private (
 
     // 根据不同的模式处理输出
     val (p_final, true_final) = if (trans) {
-      val cshft_long = cshft.get.toType(torch.int64)
+      val cshft_long = cshft.get
       val one_hot = F.one_hot(cshft_long, num_skills)
       val p_sum = (p_sigmoid * one_hot).sum(dim = -1)
       

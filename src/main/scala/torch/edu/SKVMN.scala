@@ -389,9 +389,9 @@ class SKVMN[ParamType <: FloatNN: Default](
     for (i <- 0 until seqlen) {
       // 检查是否需要替换隐藏状态
       for (j <- 0 until bs) {
-        if (remaining_idx_values.shape(0) > 0 && i == remaining_idx_values.slice(0, 0, 1)(0)(0).toLong && 
-            j == remaining_idx_values.slice(0, 0, 1)(0)(1).toLong) {
-          val prev_idx = remaining_idx_values.slice(0, 0, 1)(0)(2).toLong
+        if (remaining_idx_values.shape(0) > 0 && i == remaining_idx_values.slice(0, 0, 1)(0)(0).long() &&
+            j == remaining_idx_values.slice(0, 0, 1)(0)(1).long()) {
+          val prev_idx = remaining_idx_values.slice(0, 0, 1)(0)(2).long()
           hx_current.slice(0, j, j + 1).copy_(hidden_state(prev_idx.int()).slice(0, j, j + 1))
           cx_current = cx_current.clone()
           cx_current.slice(0, j, j + 1).copy_(cell_state(prev_idx.int()).slice(0, j, j + 1))
@@ -420,7 +420,7 @@ class SKVMN[ParamType <: FloatNN: Default](
       p = p_layer(dropout_layer(hidden_state_stacked))
       p = torch.sigmoid(p)
       // 应用one-hot掩码
-      val one_hot_mask = F.one_hot(cshft.toLong, num_skills)
+      val one_hot_mask = F.one_hot(cshft.long(), num_skills)
       p = torch.sum(p * one_hot_mask, dim = -1)
       true_target = r.slice(1, length, r.shape(1)).to(dtype = torch.float32)
     } else if (mask_future || pred_last) {

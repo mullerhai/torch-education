@@ -72,7 +72,7 @@ class DKTForget[ParamType <: FloatNN: Default](
   )
 
   // LSTM层
-  val lstm_layer: LSTM[ParamType] = LSTM(embedding_size + ntotal, hidden_size, batchFirst = true)
+  val lstm_layer: LSTM[ParamType] = LSTM(embedding_size + ntotal, hidden_size, batch_first = true)
 
   // Dropout层
   val dropout_layer: Dropout[ParamType] = Dropout(dropout)

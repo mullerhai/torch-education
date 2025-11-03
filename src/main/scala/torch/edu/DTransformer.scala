@@ -60,7 +60,7 @@ class DTransformer[ParamType <: FloatNN: Default](
   val block4 = new DTransformerLayer[ParamType](embeddingSize, nHeads, dropout, kqSame = false)
   
   // Knowledge parameters
-  val knowParams = Tensor.randn[ParamType](Seq(nKnow, embeddingSize))
+  val knowParams = torch.randn(Seq(nKnow, embeddingSize))
   
   // Output Layer
   val out = if (trans) {
@@ -141,16 +141,16 @@ class DTransformer[ParamType <: FloatNN: Default](
       val (hq, _) = block1(qEmb, qEmb, qEmb, lens, peekCur = true)
       val (hs, scores) = block2(sEmb, sEmb, sEmb, lens, peekCur = true)
       val (result, _) = block3(hq, hq, hs, lens, peekCur = false)
-      (result, scores, Tensor.empty[ParamType]())
+      (result, scores, torch.empty())
     } else if (nLayers == 1) {
       val hq = qEmb
       val (p, qScores) = block1(qEmb, qEmb, sEmb, lens, peekCur = true)
-      (p, qScores, Tensor.empty[ParamType]())
+      (p, qScores, torch.empty())
     } else if (nLayers == 2) {
       val hq = qEmb
       val (hs, _) = block1(sEmb, sEmb, sEmb, lens, peekCur = true)
       val (p, qScores) = block2(hq, hq, hs, lens, peekCur = true)
-      (p, qScores, Tensor.empty[ParamType]())
+      (p, qScores, torch.empty())
     } else {
       // Default path with 3 or more layers
       val (hq, _) = block1(qEmb, qEmb, qEmb, lens, peekCur = true)
@@ -195,13 +195,13 @@ class DTransformer[ParamType <: FloatNN: Default](
   // Base embedding method
   def baseEmb(qData: Tensor[ParamType], target: Tensor[ParamType]): 
       (Tensor[ParamType], Tensor[ParamType]) = {
-    val qEmbedData = qEmbed(qData.toLong)
+    val qEmbedData = qEmbed(qData.long())
     
     val qaEmbedData = if (separateQr) {
       val qaData = qData + numSkills * target
-      sEmbed(qaData.toLong)
+      sEmbed(qaData.long())
     } else {
-      sEmbed(target.toLong) + qEmbedData
+      sEmbed(target.long()) + qEmbedData
     }
     
     (qEmbedData, qaEmbedData)
@@ -219,10 +219,10 @@ class DTransformer[ParamType <: FloatNN: Default](
       val pid = pidData.get
       
       qDiffEmbed.foreach { qDiff =>
-        val qEmbedDiffData = qDiff(qData.toLong)
+        val qEmbedDiffData = qDiff(qData.long())
         pDiffEmbed.foreach {
           pDiff => 
-            pidEmbedData = Some(pDiff(pid.toLong))
+            pidEmbedData = Some(pDiff(pid.long()))
             pidEmbedData.foreach { p =>
               qEmbedData = qEmbedData + p * qEmbedDiffData
             }
@@ -231,7 +231,7 @@ class DTransformer[ParamType <: FloatNN: Default](
       
       sDiffEmbed.foreach {
         sDiff =>
-          val qaEmbedDiffData = sDiff(target.toLong)
+          val qaEmbedDiffData = sDiff(target.long())
           pidEmbedData.foreach {
             p =>
               if (separateQr) {
@@ -239,7 +239,7 @@ class DTransformer[ParamType <: FloatNN: Default](
               } else {
                 qDiffEmbed.foreach {
                   qDiff =>
-                    val qEmbedDiffData = qDiff(qData.toLong)
+                    val qEmbedDiffData = qDiff(qData.long())
                     qaEmbedData = qaEmbedData + p * (qaEmbedDiffData + qEmbedDiffData)
                 }
               }
@@ -309,9 +309,9 @@ class DTransformer[ParamType <: FloatNN: Default](
     val preds = m(output)
     
     if (qCl) {
-      val maskedLabels = sDevice.where(sDevice >= 0, sDevice, Tensor.empty[ParamType]())
-      val maskedLogits = output.where(sDevice >= 0, output, Tensor.empty[ParamType]())
-      F.binarycross_entropyWithLogits(maskedLogits, maskedLabels, reduction = "mean") + regLoss
+      val maskedLabels = sDevice.where(sDevice >= 0, sDevice, torch.empty())
+      val maskedLogits = output.where(sDevice >= 0, output, torch.empty())
+      F.binary_cross_entropy_with_logits(maskedLogits, maskedLabels, reduction = "mean") + regLoss
     } else {
       (preds, regLoss)
     }
@@ -442,9 +442,9 @@ class DTransformer[ParamType <: FloatNN: Default](
         out(torch.cat(Seq(query, h), dim = -1)).squeeze(-1)
       }
       
-      val maskedY = y.where(label >= 0, y, Tensor.empty[ParamType]())
-      val maskedLabel = label.where(label >= 0, label, Tensor.empty[ParamType]())
-      predLoss = predLoss + F.binarycross_entropyWithLogits(maskedY, maskedLabel, reduction = "mean")
+      val maskedY = y.where(label >= 0, y, torch.empty())
+      val maskedLabel = label.where(label >= 0, label, torch.empty())
+      predLoss = predLoss + F.binary_cross_entropy_with_logits(maskedY, maskedLabel, reduction = "mean")
     }
     
     // Calculate final predictions
@@ -452,7 +452,7 @@ class DTransformer[ParamType <: FloatNN: Default](
     val preds = m(logits)
     
     val (finalPreds, trueLabels) = if (trans) {
-      val truePreds = (preds * F.oneHot(cshft.get.toLong, numSkills)).sum(dim = -1)
+      val truePreds = (preds * F.oneHot(cshft.get.long(), numSkills)).sum(dim = -1)
       val trueTargets = r.slice(1, length, r.shape(1))
       (truePreds, trueTargets)
     } else if (maskFuture || predLast || maskResponse) {
@@ -499,7 +499,7 @@ class DTransformer[ParamType <: FloatNN: Default](
         z2Processed = proj(z2Processed)
     }
     
-    F.cosineSimilarity(z1Processed.mean(dim = 3), z2Processed.mean(dim = 3), dim = -1) / 0.05f
+    F.cosine_similarity(z1Processed.mean(dim = 3), z2Processed.mean(dim = 3), dim = -1) / 0.05f
   }
   
   // Apply method for TensorModule
@@ -574,24 +574,24 @@ class MultiHeadAttention3[ParamType <: FloatNN: Default](
   
   val outProj = nn.Linear(embeddingSize, embeddingSize, bias = bias)
   val gammas = torch.zeros(Seq(nHeads, 1, 1))
-  nn.init.xavierUniform(gammas)
+  nn.init.xavier_uniform_(gammas)
   
   // Collect parameters
   override val params: Seq[Tensor[ParamType]] = {
     val paramsList = ListBuffer[Tensor[ParamType]]()
     paramsList.append(qLinear.weight)
-    if (qLinear.bias.isDefined) paramsList.append(qLinear.bias.get)
+    if (qLinear.bias.isDefined) paramsList.append(qLinear.bias)
     
     if (!kqSame) {
       paramsList.append(kLinear.weight)
-      if (kLinear.bias.isDefined) paramsList.append(kLinear.bias.get)
+      if (kLinear.bias.isDefined) paramsList.append(kLinear.bias)
     }
     
     paramsList.append(vLinear.weight)
-    if (vLinear.bias.isDefined) paramsList.append(vLinear.bias.get)
+    if (vLinear.bias.isDefined) paramsList.append(vLinear.bias)
     
     paramsList.append(outProj.weight)
-    if (outProj.bias.isDefined) paramsList.append(outProj.bias.get)
+    if (outProj.bias.isDefined) paramsList.append(outProj.bias)
     
     paramsList.append(gammas)
     
@@ -615,7 +615,7 @@ class MultiHeadAttention3[ParamType <: FloatNN: Default](
     vProcessed = vProcessed.transpose(1, 2)
     
     // Calculate attention
-    val (vOutput, scores) = attention(qProcessed, kProcessed, vProcessed, mask, Some(gammas), maxout)
+    val (vOutput, scores) = attention2(qProcessed, kProcessed, vProcessed, mask, Some(gammas), maxout)
     
     // Concatenate heads and put through final linear layer
     val concat = vOutput.transpose(1, 2).contiguous().view(bs, -1, embeddingSize)
@@ -634,7 +634,7 @@ class MultiHeadAttention3[ParamType <: FloatNN: Default](
 }
 
 // Attention function
-def attention[ParamType <: FloatNN: Default](
+def attention2[ParamType <: FloatNN: Default](
     q: Tensor[ParamType],
     k: Tensor[ParamType],
     v: Tensor[ParamType],

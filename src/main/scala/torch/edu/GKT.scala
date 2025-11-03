@@ -32,7 +32,7 @@ class GKT[ParamType <: FloatNN: Default](
   
   // Concept and interaction embeddings
   val interactionEmb = nn.Embedding(resLen * numSkills, embeddingSize)
-  val embC = nn.Embedding(numSkills + 1, embeddingSize, paddingIdx = -1)
+  val embC = nn.Embedding(numSkills + 1, embeddingSize, padding_idx = -1)
   
   // MLP layers
   val mlpInputDim = hiddenDim + embeddingSize
@@ -70,22 +70,22 @@ class GKT[ParamType <: FloatNN: Default](
   def aggregate(xt: Tensor[ParamType], qt: Tensor[ParamType], ht: Tensor[ParamType], batchSize: Int): Tensor[ParamType] = {
     val qtMask = qt.ne(-1)
     val xIdxMat = torch.arange(resLen * numSkills)
-    val xEmbedding = interactionEmb(xIdxMat.toLong)
+    val xEmbedding = interactionEmb(xIdxMat.long())
     
-    val maskedFeat = F.embedding(xt(qtMask).toLong, oneHotFeat)
+    val maskedFeat = F.embedding(xt(qtMask).long(), oneHotFeat)
     val resEmbedding = maskedFeat.matmul(xEmbedding)
     val maskNum = resEmbedding.shape(0)
     
-    val conceptIdxMat = Tensor.full[ParamType](Seq(batchSize, numSkills), numSkills.toFloat).toLong
+    val conceptIdxMat = Tensor.full[ParamType](Seq(batchSize, numSkills), numSkills.toFloat).long()
     val qtMaskExpanded = qtMask.unsqueeze(1).expand(batchSize, numSkills)
-    val arangeMat = torch.arange(numSkills).unsqueeze(0).expand(batchSize, numSkills).toLong
+    val arangeMat = torch.arange(numSkills).unsqueeze(0).expand(batchSize, numSkills).long()
     conceptIdxMat.where(qtMaskExpanded, arangeMat, conceptIdxMat)
     
     val conceptEmbedding = embC(conceptIdxMat)
     
-    val qtMasked = qt(qtMask).toLong
+    val qtMasked = qt(qtMask).long()
     val indices = Seq(
-      torch.arange(maskNum).toLong,
+      torch.arange(maskNum).long(),
       qtMasked
     )
     conceptEmbedding.indexPut(indices, resEmbedding)
@@ -96,12 +96,12 @@ class GKT[ParamType <: FloatNN: Default](
   // GNN aggregation step
   def aggNeighbors(tmpHt: Tensor[ParamType], qt: Tensor[ParamType]): (Tensor[ParamType], Option[Tensor[ParamType]], Option[Tensor[ParamType]], Option[Tensor[ParamType]]) = {
     val qtMask = qt.ne(-1)
-    val maskedQt = qt(qtMask).toLong
+    val maskedQt = qt(qtMask).long()
     val maskedTmpHt = tmpHt(qtMask)
     val maskNum = maskedTmpHt.shape(0)
     
     val indices = Seq(
-      torch.arange(maskNum).toLong,
+      torch.arange(maskNum).long(),
       maskedQt
     )
     val selfHt = maskedTmpHt(indices)
@@ -116,8 +116,8 @@ class GKT[ParamType <: FloatNN: Default](
     val neighFeatures = adj * fNeighborList(0)(neighHt) + reverseAdj * fNeighborList(1)(neighHt)
     
     val mNext = tmpHt.slice(-1, 0, hiddenDim)
-    mNext.indexPut(Seq(qtMask), neighFeatures)
-    mNext.indexPut(Seq(qtMask) ++ indices, selfFeatures)
+    mNext.index_put(Seq(qtMask.long()), neighFeatures)
+    mNext.index_put(Seq(qtMask.long()) ++ indices, selfFeatures)
     
     (mNext, None, None, None)
   }
@@ -127,7 +127,7 @@ class GKT[ParamType <: FloatNN: Default](
     val qtMask = qt.ne(-1)
     val (mNext, conceptEmbedding, recEmbedding, zProb) = aggNeighbors(tmpHt, qt)
     
-    mNext.indexPut(Seq(qtMask), eraseAddGate(mNext(qtMask)))
+    mNext.index_put(Seq(qtMask.long()), eraseAddGate(mNext(qtMask)))
     
     val hNext = mNext
     val res = gru(
@@ -135,8 +135,8 @@ class GKT[ParamType <: FloatNN: Default](
       ht(qtMask).reshape(-1, hiddenDim)
     )
     
-    hNext.indexPut(
-      Seq(qtMask), 
+    hNext.index_put(
+      Seq(qtMask.long()), 
       res.reshape(-1, numSkills, hiddenDim)
     )
     
@@ -155,7 +155,7 @@ class GKT[ParamType <: FloatNN: Default](
   // Get next prediction
   def getNextPred(yt: Tensor[ParamType], qNext: Tensor[ParamType]): Tensor[ParamType] = {
     val nextQt = qNext.where(qNext.ne(-1), torch.full_like(qNext, numSkills.toFloat))
-    val oneHotQt = F.embedding(nextQt.toLong, oneHotQ)
+    val oneHotQt = F.embedding(nextQt.long(), oneHotQ)
     (yt * oneHotQt).sum(dim = 1)
   }
   
@@ -192,7 +192,7 @@ class GKT[ParamType <: FloatNN: Default](
       }
     }
     
-    val predRes = Tensor.stack(predList.toSeq, dim = 1)
+    val predRes = torch.stack(predList.toSeq, dim = 1)
     val outDict = Map(
       "pred" -> predRes.slice(1, length - 1, predRes.shape(1)),
       "true" -> r.slice(1, length, r.shape(1))
@@ -238,17 +238,17 @@ class MLP[ParamType <: FloatNN: Default](
   def initWeights(): Unit = {
     fc1.weight.data = nn.init.xavierNormal(fc1.weight.data.shape)
     if (bias && fc1.bias.isDefined) {
-      fc1.bias.get.data.fill_(0.1f)
+      fc1.bias.data.fill_(0.1f)
     }
     
     fc2.weight.data = nn.init.xavierNormal(fc2.weight.data.shape)
     if (bias && fc2.bias.isDefined) {
-      fc2.bias.get.data.fill_(0.1f)
+      fc2.bias.data.fill_(0.1f)
     }
     
     norm.weight.data.fill_(1f)
     if (norm.bias.isDefined) {
-      norm.bias.get.data.fill_(0f)
+      norm.bias.data.fill_(0f)
     }
   }
   
@@ -277,11 +277,11 @@ class MLP[ParamType <: FloatNN: Default](
   override val params: Seq[Tensor[ParamType]] = {
     val paramsList = ListBuffer[Tensor[ParamType]]()
     paramsList.append(fc1.weight)
-    if (fc1.bias.isDefined) paramsList.append(fc1.bias.get)
+    if (fc1.bias.isDefined) paramsList.append(fc1.bias)
     paramsList.append(fc2.weight)
-    if (fc2.bias.isDefined) paramsList.append(fc2.bias.get)
+    if (fc2.bias.isDefined) paramsList.append(fc2.bias)
     paramsList.append(norm.weight)
-    if (norm.bias.isDefined) paramsList.append(norm.bias.get)
+    if (norm.bias.isDefined) paramsList.append(norm.bias)
     paramsList.toSeq
   }
   
@@ -295,7 +295,7 @@ class EraseAddGate[ParamType <: FloatNN: Default](
     bias: Boolean = true
 ) extends TensorModule[ParamType] with HasParams[ParamType] {
   
-  val weight = Tensor.randn[ParamType](Seq(numSkills))
+  val weight = torch.randn(Seq(numSkills))
   resetParameters()
   
   val erase = nn.Linear(featureDim, featureDim, bias = bias)
@@ -303,7 +303,7 @@ class EraseAddGate[ParamType <: FloatNN: Default](
   
   def resetParameters(): Unit = {
     val stdv = 1.0f / math.sqrt(weight.shape(0)).toFloat
-    weight.data = Tensor.rand[ParamType](weight.data.shape, min = -stdv, max = stdv)
+    weight.data = torch.rand(weight.data.shape, min = -stdv, max = stdv)
   }
   
   // Forward method
@@ -319,9 +319,9 @@ class EraseAddGate[ParamType <: FloatNN: Default](
     val paramsList = ListBuffer[Tensor[ParamType]]()
     paramsList.append(weight)
     paramsList.append(erase.weight)
-    if (erase.bias.isDefined) paramsList.append(erase.bias.get)
+    if (erase.bias.isDefined) paramsList.append(erase.bias)
     paramsList.append(add.weight)
-    if (add.bias.isDefined) paramsList.append(add.bias.get)
+    if (add.bias.isDefined) paramsList.append(add.bias)
     paramsList.toSeq
   }
   

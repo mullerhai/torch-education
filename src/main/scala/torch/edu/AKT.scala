@@ -3,11 +3,12 @@ package torch.edu
 import torch.*
 import torch.nn.{functional as F, *}
 import torch.nn.modules.{HasParams, TensorModule}
-
+import torch.nn as nn
+import torch.nn.*
 import scala.collection.mutable.ListBuffer
 import scala.math
 import scala.util.Try
-
+import torch.nn.init.{constant_, xavierUniform_}
 // 对应Python中的Dim枚举类
 enum Dim:
   case batch, seq, feature
@@ -21,7 +22,7 @@ class MultiHeadAttention[ParamType <: FloatNN: Default](
     kq_same: Boolean,
     bias: Boolean = true
 ) extends TensorModule[ParamType] with HasParams[ParamType]:
-  import torch.ops.nn.init.{constant_, xavierUniform_}
+
 
   val d_k: Int = d_feature
   val h: Int = n_heads
@@ -45,10 +46,10 @@ class MultiHeadAttention[ParamType <: FloatNN: Default](
     if (!kq_same_flag) q_linear.foreach(l => xavierUniform_(l.weight))
 
     if (proj_bias) {
-      constant_(k_linear.bias.get, 0.0)
-      constant_(v_linear.bias.get, 0.0)
-      if (!kq_same_flag) q_linear.foreach(l => constant_(l.bias.get, 0.0))
-      constant_(out_proj.bias.get, 0.0)
+      constant_(k_linear.bias, 0.0)
+      constant_(v_linear.bias, 0.0)
+      if (!kq_same_flag) q_linear.foreach(l => constant_(l.bias, 0.0))
+      constant_(out_proj.bias, 0.0)
     }
   }
 
@@ -113,7 +114,7 @@ private def attention[ParamType <: FloatNN: Default](
   val x2 = x1.transpose(0, 1).contiguous()
 
   // 计算位置效应
-  val distScores = withNoGrad {
+  val distScores = torch.no_grad {
     val scores_ = scores.masked_fill(mask == torch.zeros(1), -1e32f)
     val softmaxScores = F.softmax(scores_, dim = -1)
     val maskedScores = softmaxScores * mask
@@ -279,7 +280,7 @@ class LearnablePositionalEmbedding[ParamType <: FloatNN: Default](
     max_len: Int = 512
 ) extends TensorModule[ParamType] with HasParams[ParamType]:
   // 初始化可学习的位置编码
-  val weight: Tensor[ParamType] = (0.1f * Tensor.randn[ParamType](max_len, embedding_size)).unsqueeze(0).requiresGrad_(true)
+  val weight: Tensor[ParamType] = (0.1f * torch.randn(max_len, embedding_size)).unsqueeze(0).requiresGrad_(true)
 
   def forward(x: Tensor[ParamType]): Tensor[ParamType] = {
     weight.slice(1, 0, x.size(Dim.seq.idx))
@@ -296,8 +297,8 @@ class CosinePositionalEmbedding[ParamType <: FloatNN: Default](
     max_len: Int = 512
 ) extends TensorModule[ParamType] with HasParams[ParamType]:
   // 计算位置编码
-  val weight: Tensor[ParamType] = withNoGrad {
-    val pe = 0.1f * Tensor.randn[ParamType](max_len, embedding_size)
+  val weight: Tensor[ParamType] = torch.no_grad{
+    val pe = 0.1f * torch.randn(max_len, embedding_size)
     val position = torch.arange(0, max_len).unsqueeze(1)
     val divTerm = torch.exp(
       torch.arange(0, embedding_size, 2) *
@@ -397,7 +398,7 @@ class AKT[ParamType <: FloatNN: Default](
   def reset(): Unit = {
     for (p <- this.parameters) {
       if (num_questions > 0 && p.size(0) == num_questions + 1) {
-        torch.ops.nn.init.constant_(p, 0.0)
+        torch.nn.init.constant_(p, 0.0)
       }
     }
   }
@@ -441,7 +442,7 @@ class AKT[ParamType <: FloatNN: Default](
       target = target.slice(1, 0, -length)
     } else if (mask_future) {
       // 应用未来掩码
-      val maskPart = attention_mask.slice(1, -length, -1).zeros_like()
+      val maskPart = attention_mask(1, -length, -1).zeros_like()
       val maskedAttention = torch.cat(
         Seq(attention_mask.slice(1, 0, -length), maskPart),
         dim = 1
@@ -514,7 +515,7 @@ class AKT[ParamType <: FloatNN: Default](
         output = torch.cat(Seq(output.slice(1, 0, mid), expandedOutput), dim = 1)
         
         // 使用one-hot编码选择技能对应的输出
-        val oneHot = F.one_hot(cshft.get.toLong, num_skills)
+        val oneHot = F.one_hot(cshft.get.long(), num_skills)
         output = (output * oneHot).sum(-1)
         
         // 选择后半部分输出
@@ -522,7 +523,7 @@ class AKT[ParamType <: FloatNN: Default](
         true_output = r.slice(1, length + mid, -1)
       } else {
         // 使用one-hot编码选择技能对应的输出
-        val oneHot = F.one_hot(cshft.get.toLong, num_skills)
+        val oneHot = F.one_hot(cshft.get.long(), num_skills)
         output = (output * oneHot).sum(-1)
         true_output = r.slice(1, length, -1)
       }

@@ -3,7 +3,8 @@ package torch.edu
 import torch.*
 import torch.nn.functional as F
 import torch.nn.modules.{HasParams, TensorModule}
-
+import torch.nn.*
+import torch.nn as nn
 import scala.collection.mutable.ListBuffer
 
 class DIMKT[ParamType <: FloatNN: Default](
@@ -19,14 +20,14 @@ class DIMKT[ParamType <: FloatNN: Default](
 ) extends TensorModule[ParamType] with HasParams[ParamType] {
 
   // 模型参数
-  val mask_future = mask_future
-  val length = length
-  val trans = trans
-  val num_questions = num_questions
-  val num_skills = num_skills
-  val embedding_size = embedding_size
-  val batch_size = batch_size
-  val difficult_levels = difficult_levels
+//  val mask_future = mask_future
+//  val length = length
+//  val trans = trans
+//  val num_questions = num_questions
+//  val num_skills = num_skills
+//  val embedding_size = embedding_size
+//  val batch_size = batch_size
+//  val difficult_levels = difficult_levels
   val sigmoid = Sigmoid[ParamType]()
   val tanh = Tanh[ParamType]()
   val dropout = Dropout[ParamType](dropout)
@@ -57,7 +58,7 @@ class DIMKT[ParamType <: FloatNN: Default](
   val linear_6: Linear[ParamType] = nn.Linear[ParamType](4 * embedding_size, embedding_size)
 
   // 损失函数
-  val loss_fn: BCEWithLogitsLoss = nn.BCEWithLogitsLoss(reduction = Reduction.Mean)
+  val loss_fn: BCEWithLogitsLoss = nn.BCEWithLogitsLoss(reduction = "mean")
 
   // 输出层
   val out: Sequential[ParamType] = if (trans || mask_future) {
@@ -184,13 +185,13 @@ class DIMKT[ParamType <: FloatNN: Default](
     // 根据不同模式计算输出
     val (logits, true_val) = if (trans) {
       val logits_val = sigmoid(out(transformed_target * output))
-      val one_hot_cshft = F.one_hot(cshft.toType[Int64], num_skills)
+      val one_hot_cshft = F.one_hot(cshft, num_skills)
       val logits_sum = (logits_val * one_hot_cshft).sum(dim = -1)
       val true_val = r.slice(1, length)
       (logits_sum, true_val)
     } else if (mask_future) {
       val logits_val = sigmoid(out(transformed_target * output))
-      val one_hot_cshft = F.one_hot(cshft.toType[Int64], num_skills)
+      val one_hot_cshft = F.one_hot(cshft, num_skills)
       val logits_sum = (logits_val * one_hot_cshft).sum(dim = -1).slice(1, -length)
       val true_val = r.slice(1, -length)
       (logits_sum, true_val)
@@ -213,7 +214,7 @@ class DIMKT[ParamType <: FloatNN: Default](
     val true_ = out_dict("true").flatten()
     val mask = true_ > Tensor(-1)
     val loss = loss_fn(pred.masked_select(mask), true_.masked_select(mask))
-    (loss, Tensor(mask.sum().item().toLong), true_.masked_select(mask).sum())
+    (loss, Tensor(mask.sum().item().long()), true_.masked_select(mask).sum())
   }
 
   // 实现apply方法
